@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DiffLint — Lint your git diff before you push</title>
+  <meta name="description" content="Paste a git diff and instantly catch merge conflict markers, hardcoded secrets, debug statements (console.log, debugger), and TODO comments. Free, browser-side, no signup required.">
+  <meta name="keywords" content="git diff checker, diff linter, check git diff, find console.log in diff, git patch linter, diff secret checker, pre-push diff check">
+  <meta property="og:title" content="DiffLint — Lint your git diff before you push">
+  <meta property="og:description" content="Paste a git diff and instantly catch merge conflict markers, hardcoded secrets, debug statements, and TODO comments. Free, browser-side, no signup.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://difflint.radicchio.page">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="DiffLint — Lint your git diff before you push">
+  <meta name="twitter:description" content="Paste a git diff and instantly catch merge conflict markers, hardcoded secrets, debug statements, and TODO comments.">
+  <link rel="canonical" href="https://difflint.radicchio.page">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "DiffLint",
+    "url": "https://difflint.radicchio.page",
+    "description": "Browser-side git diff linter. Paste a unified diff and instantly catch merge conflict markers, hardcoded secrets, debug statements, and TODO comments.",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Any",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "featureList": [
+      "Merge conflict marker detection",
+      "Hardcoded secret scanning",
+      "Debug statement detection (console.log, debugger, binding.pry)",
+      "TODO and FIXME comment detection",
+      "AWS access key detection",
+      "Private key detection",
+      "Runs entirely in browser — no server, no signup"
+    ]
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What does DiffLint check?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "DiffLint scans for: merge conflict markers (<<<<<<, =======, >>>>>>>), hardcoded secrets and credentials, AWS access keys, private key material, debug statements (console.log, console.error, debugger, binding.pry, var_dump), TODO/FIXME/HACK comments, and explicit DO NOT COMMIT markers."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does my code leave my browser?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. DiffLint runs entirely in your browser using JavaScript. Your code and diff are never sent to any server."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What diff format does DiffLint support?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "DiffLint parses unified diff format — the standard output of git diff, git show, git diff --staged, git stash show -p, and .patch files."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How do I get my diff to paste here?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Run 'git diff' (for unstaged changes) or 'git diff --staged' (for staged changes) in your terminal and copy the output. You can also use 'git show HEAD' to check your last commit."
+        }
+      }
+    ]
+  }
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #111;
+      --surface: #1a1a1a;
+      --border: #2a2a2a;
+      --text: #e0d8c8;
+      --muted: #6b6459;
+      --accent: #c8a84e;
+      --error: #e05c5c;
+      --warning: #d4924a;
+      --info: #5c8de0;
+      --success: #5aab6e;
+      --font: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.6;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Header */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .logo {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.02em;
+    }
+
+    .logo span {
+      color: var(--accent);
+    }
+
+    .tagline {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .badge {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      padding: 3px 8px;
+      border-radius: 3px;
+    }
+
+    /* Main layout */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* Input pane */
+    .input-pane {
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .pane-header {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface);
+    }
+
+    .pane-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+
+    .pane-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .btn {
+      font-family: var(--font);
+      font-size: 12px;
+      padding: 5px 12px;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: all 0.1s;
+      background: transparent;
+      color: var(--muted);
+    }
+
+    .btn:hover {
+      color: var(--text);
+      border-color: var(--muted);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #111;
+      font-weight: 600;
+    }
+
+    .btn-primary:hover {
+      background: #d4b45a;
+      border-color: #d4b45a;
+      color: #111;
+    }
+
+    #diff-input {
+      flex: 1;
+      background: var(--bg);
+      color: var(--text);
+      border: none;
+      outline: none;
+      resize: none;
+      padding: 16px;
+      font-family: var(--font);
+      font-size: 13px;
+      line-height: 1.7;
+      tab-size: 2;
+      min-height: 400px;
+    }
+
+    #diff-input::placeholder {
+      color: var(--muted);
+    }
+
+    /* Results pane */
+    .results-pane {
+      display: flex;
+      flex-direction: column;
+      background: var(--bg);
+    }
+
+    .results-summary {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .summary-count {
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .count-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .dot-error { background: var(--error); }
+    .dot-warning { background: var(--warning); }
+    .dot-info { background: var(--info); }
+
+    #results-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0;
+    }
+
+    .results-empty {
+      padding: 40px 24px;
+      color: var(--muted);
+      text-align: center;
+      font-size: 13px;
+      line-height: 2;
+    }
+
+    .results-empty .emoji {
+      font-size: 28px;
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .results-clean {
+      padding: 40px 24px;
+      text-align: center;
+    }
+
+    .results-clean .icon {
+      font-size: 32px;
+      display: block;
+      margin-bottom: 12px;
+    }
+
+    .results-clean .clean-title {
+      color: var(--success);
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .results-clean .clean-sub {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .finding {
+      border-bottom: 1px solid var(--border);
+      padding: 12px 16px;
+      transition: background 0.1s;
+    }
+
+    .finding:hover {
+      background: var(--surface);
+    }
+
+    .finding-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .severity-badge {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 2px 6px;
+      border-radius: 2px;
+      font-weight: 700;
+    }
+
+    .severity-error {
+      background: rgba(224, 92, 92, 0.15);
+      color: var(--error);
+      border: 1px solid rgba(224, 92, 92, 0.3);
+    }
+
+    .severity-warning {
+      background: rgba(212, 146, 74, 0.15);
+      color: var(--warning);
+      border: 1px solid rgba(212, 146, 74, 0.3);
+    }
+
+    .severity-info {
+      background: rgba(92, 141, 224, 0.15);
+      color: var(--info);
+      border: 1px solid rgba(92, 141, 224, 0.3);
+    }
+
+    .finding-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .finding-location {
+      font-size: 11px;
+      color: var(--muted);
+      margin-left: auto;
+    }
+
+    .finding-detail {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .finding-snippet {
+      font-size: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 6px 10px;
+      overflow-x: auto;
+      white-space: pre;
+      color: #e05c5c;
+      border-left: 3px solid var(--error);
+    }
+
+    .finding-snippet.warning {
+      color: var(--warning);
+      border-left-color: var(--warning);
+    }
+
+    .finding-snippet.info {
+      color: var(--info);
+      border-left-color: var(--info);
+    }
+
+    /* Stats bar */
+    .stats-bar {
+      padding: 8px 16px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      gap: 16px;
+    }
+
+    /* Description section */
+    .description {
+      border-top: 1px solid var(--border);
+      padding: 40px 24px;
+      max-width: 800px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .description h1 {
+      font-size: 20px;
+      color: var(--text);
+      margin-bottom: 12px;
+      font-weight: 700;
+    }
+
+    .description p {
+      color: var(--muted);
+      margin-bottom: 16px;
+      line-height: 1.8;
+      font-size: 13px;
+    }
+
+    .description h2 {
+      font-size: 15px;
+      color: var(--text);
+      margin-top: 28px;
+      margin-bottom: 10px;
+    }
+
+    .rules-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .rule-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 12px 14px;
+    }
+
+    .rule-card-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .rule-card-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .rule-card-detail {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    /* FAQ */
+    .faq { margin-top: 8px; }
+
+    .faq-item {
+      border-top: 1px solid var(--border);
+      padding: 16px 0;
+    }
+
+    .faq-q {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .faq-a {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    code {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-family: var(--font);
+      font-size: 12px;
+    }
+
+    /* Sibling tools */
+    .sibling-tools {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .tool-link {
+      font-size: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      border-radius: 3px;
+      color: var(--muted);
+      transition: all 0.1s;
+    }
+
+    .tool-link:hover {
+      color: var(--text);
+      border-color: var(--muted);
+      text-decoration: none;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 16px 24px;
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: gap;
+      gap: 8px;
+    }
+
+    footer a { color: var(--muted); }
+    footer a:hover { color: var(--text); text-decoration: none; }
+
+    /* Mobile */
+    @media (max-width: 720px) {
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .input-pane {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+      }
+
+      #diff-input {
+        min-height: 250px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">diff<span>lint</span></div>
+  <div class="tagline">lint your git diff before you push</div>
+  <div class="badge">browser-side · no signup</div>
+</header>
+
+<main>
+  <div class="workspace">
+    <!-- Input pane -->
+    <div class="input-pane">
+      <div class="pane-header">
+        <span class="pane-title">Paste diff</span>
+        <div class="pane-actions">
+          <button class="btn" id="load-sample-btn">load sample</button>
+          <button class="btn" id="clear-btn">clear</button>
+          <button class="btn btn-primary" id="lint-btn">Lint It ↵</button>
+        </div>
+      </div>
+      <textarea
+        id="diff-input"
+        placeholder="Paste the output of `git diff` or `git diff --staged` here...
+
+Example:
+diff --git a/src/app.js b/src/app.js
+--- a/src/app.js
++++ b/src/app.js
+@@ -10,6 +10,7 @@
+ function fetchData() {
++  console.log('fetching data');
+   return fetch('/api/data');
+ }"
+        spellcheck="false"
+        autocomplete="off"
+      ></textarea>
+    </div>
+
+    <!-- Results pane -->
+    <div class="results-pane">
+      <div class="pane-header results-summary" id="summary-bar">
+        <span class="pane-title">Findings</span>
+        <div id="summary-counts" style="display:flex;gap:12px"></div>
+      </div>
+      <div id="results-list">
+        <div class="results-empty">
+          <span class="emoji">🔍</span>
+          Paste a <code>git diff</code> and click <strong>Lint It</strong><br>
+          to scan for issues before you push.
+        </div>
+      </div>
+      <div class="stats-bar" id="stats-bar" style="display:none">
+        <span id="stat-files">— files</span>
+        <span id="stat-additions">— additions</span>
+        <span id="stat-findings">— findings</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Description + FAQ -->
+  <div class="description">
+    <h1>Git diff linter — catch issues before code review</h1>
+    <p>
+      DiffLint scans your unified diff for the mistakes that slip past a visual scan: debug statements you forgot to remove,
+      merge conflict markers that will break your build, hardcoded credentials that shouldn't leave your machine,
+      and TODO comments that shouldn't go out in a PR. Paste the output of <code>git diff</code> or <code>git diff --staged</code>
+      and get a categorized report in under a second. Everything runs in your browser — your code never leaves your machine.
+    </p>
+    <p>
+      DiffLint is especially useful as a habit before opening a pull request, pushing to a shared branch, or reviewing
+      your own changes one last time. It complements your linter and CI pipeline by catching the human-layer mistakes
+      those tools miss: the <code>console.log</code> added for a debugging session, the <code>binding.pry</code>
+      that snuck into a Ruby controller, the API key that got pasted directly into a config file.
+    </p>
+
+    <h2>What DiffLint checks</h2>
+    <div class="rules-grid">
+      <div class="rule-card">
+        <div class="rule-card-header">
+          <span class="severity-badge severity-error">error</span>
+          <span class="rule-card-name">Merge conflict markers</span>
+        </div>
+        <div class="rule-card-detail"><code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>, <code>=======</code>, <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code> — breaks the build</div>
+      </div>
+      <div class="rule-card">
+        <div class="rule-card-header">
+          <span class="severity-badge severity-error">error</span>
+          <span class="rule-card-name">Hardcoded secrets</span>
+        </div>
+        <div class="rule-card-detail">Passwords, API keys, tokens assigned to literals</div>
+      </div>
+      <div class="rule-card">
+        <div class="rule-card-header">
+          <span class="severity-badge severity-error">error</span>
+          <span class="rule-card-name">AWS access keys</span>
+        </div>
+        <div class="rule-card-detail"><code>AKIA...</code> pattern — rotate immediately if found</div>
+      </div>
+      <div class="rule-card">
+        <div class="rule-card-header">
+          <span class="severity-badge severity-error">error</span>
+          <span class="rule-card-name">Private key material</span>
+        </div>
+        <div class="rule-card-detail"><code>-----BEGIN PRIVATE KEY-----</code> and variants</div>
+      </div>
+      <div class="rule-card">
+        <div class="rule-card-header">
+          <span class="severity-badge severity-error">error</span>
+          <span class="rule-card-name">DO NOT COMMIT marker</span>
+        </div>
+        <div class="rule-card-detail">Explicit markers added to prevent this exact situation</div>
+      </div>
+      <div class="rule-card">
+        <div class="rule-card-header">
+          <span class="severity-badge severity-warning">warning</span>
+          <span class="rule-card-name">Debug statements</span>
+        </div>
+        <div class="rule-card-detail"><code>console.log</code>, <code>debugger</code>, <code>binding.pry</code>, <code>var_dump</code>, <code>dd(</code></div>
+      </div>
+      <div class="rule-card">
+        <div class="rule-card-header">
+          <span class="severity-badge severity-warning">warning</span>
+          <span class="rule-card-name">TODO / FIXME comments</span>
+        </div>
+        <div class="rule-card-detail">TODO, FIXME, HACK, XXX, NOCOMMIT in added lines</div>
+      </div>
+      <div class="rule-card">
+        <div class="rule-card-header">
+          <span class="severity-badge severity-info">info</span>
+          <span class="rule-card-name">Focused test skips</span>
+        </div>
+        <div class="rule-card-detail"><code>fdescribe</code>, <code>fit(</code>, <code>xit(</code>, <code>xdescribe</code> — tests focused or skipped</div>
+      </div>
+    </div>
+
+    <h2>How to use</h2>
+    <p>
+      Run <code>git diff</code> (for unstaged changes), <code>git diff --staged</code> (for staged changes),
+      or <code>git show HEAD</code> (to check your last commit) in your terminal.
+      Copy the output and paste it into DiffLint. Click <strong>Lint It</strong> or press <kbd>Ctrl+Enter</kbd>.
+    </p>
+    <p>
+      DiffLint understands unified diff format — the standard format used by git, GitHub, GitLab, and Bitbucket.
+      It works with output from <code>git diff</code>, <code>git stash show -p</code>, <code>git show</code>,
+      and <code>.patch</code> files. Multi-file diffs are fully supported.
+    </p>
+
+    <h2>Frequently asked questions</h2>
+    <div class="faq">
+      <div class="faq-item">
+        <div class="faq-q">Does my code leave my browser?</div>
+        <div class="faq-a">
+          No. DiffLint runs entirely in your browser using JavaScript. Your diff is parsed and scanned locally
+          using regular expressions — nothing is sent to any server. This makes it safe to use with
+          proprietary code, sensitive diffs, or diffs that might contain the very secrets you're scanning for.
+        </div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">What diff format does DiffLint support?</div>
+        <div class="faq-a">
+          DiffLint parses unified diff format — the output of <code>git diff</code>, <code>git show</code>,
+          <code>git diff --staged</code>, <code>git stash show -p</code>, and <code>.patch</code> files.
+          It correctly handles multi-file diffs and tracks which file each finding belongs to.
+        </div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Why does DiffLint only scan added lines?</div>
+        <div class="faq-a">
+          DiffLint focuses on lines you're <em>adding</em> to the codebase (lines starting with <code>+</code>
+          in the diff). Checking deleted lines for issues would create noise — you want to know what's going
+          <em>in</em>, not what's leaving. Lines without a <code>+</code> prefix are context lines from the
+          diff and are ignored.
+        </div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Can I use DiffLint in my terminal or CI pipeline?</div>
+        <div class="faq-a">
+          The browser tool is free and designed for manual use. A CI integration is planned — a webhook that
+          scans pull requests automatically and posts a comment with findings. For now, DiffLint works best as
+          a pre-push habit alongside <code>git diff --staged</code>.
+        </div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">DiffLint flagged something that's intentional. What do I do?</div>
+        <div class="faq-a">
+          Warnings and info findings are advisory — you're the one who decides what belongs in the commit.
+          If you're intentionally leaving a TODO comment or a test-skip marker, that's your call. DiffLint
+          just surfaces it so the decision is conscious, not accidental.
+        </div>
+      </div>
+    </div>
+
+    <h2>More free developer tools</h2>
+    <p>From the same linting cluster:</p>
+    <div class="sibling-tools">
+      <a class="tool-link" href="https://envlint.com">EnvLint — validate .env files</a>
+      <a class="tool-link" href="https://feedlint.radicchio.page">FeedLint — validate RSS/Atom feeds</a>
+      <a class="tool-link" href="https://cronfig.radicchio.page">Cronfig — test cron expressions</a>
+      <a class="tool-link" href="https://linkscrub.radicchio.page">LinkScrub — strip tracking params from URLs</a>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <span>DiffLint — free, browser-side git diff linter</span>
+  <span>
+    <a href="https://bitterdesk.com">support</a> ·
+    <a href="https://bitterdesk.com/privacy">privacy</a> ·
+    built with <a href="https://bitter.sh">Bitter</a>
+  </span>
+</footer>
+
+<script>
+(function() {
+  'use strict';
+
+  // --- Lint rules ---
+  const RULES = [
+    {
+      id: 'conflict_marker',
+      severity: 'error',
+      label: 'Merge conflict marker',
+      test: (line) => /^\+(<{7}|={7}|>{7})/.test(line),
+      detail: () => 'Merge conflict marker — this will break the build'
+    },
+    {
+      id: 'private_key',
+      severity: 'error',
+      label: 'Private key material',
+      test: (line) => /\+.*-----BEGIN (RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY/.test(line),
+      detail: () => 'Private key detected — remove and rotate the key immediately'
+    },
+    {
+      id: 'aws_key',
+      severity: 'error',
+      label: 'AWS access key',
+      test: (line) => /\+.*\bAKIA[A-Z0-9]{16}\b/.test(line),
+      detail: () => 'AWS access key pattern detected — rotate immediately'
+    },
+    {
+      id: 'hardcoded_secret',
+      severity: 'error',
+      label: 'Hardcoded credential',
+      test: (line) => {
+        const content = line.slice(1);
+        if (!/(?:password|passwd|secret|api_key|apikey|private_key|auth_token|access_token|client_secret)\s*[=:]\s*["'][^"']{4,}["']/i.test(content)) return false;
+        if (/(?:placeholder|example|changeme|your[-_]|xxx|todo|fake|test|mock|dummy|sample|template)/i.test(content)) return false;
+        return true;
+      },
+      detail: () => 'Hardcoded credential value — use environment variables instead'
+    },
+    {
+      id: 'nocommit',
+      severity: 'error',
+      label: 'DO NOT COMMIT marker',
+      test: (line) => /^\+.*\bDO[_\s]?NOT[_\s]?COMMIT\b/i.test(line),
+      detail: () => 'Explicit DO NOT COMMIT marker found in added lines'
+    },
+    {
+      id: 'console_log',
+      severity: 'warning',
+      label: 'Debug statement',
+      test: (line) => /^\+(?!.*\/\/).*\b(console\.(log|error|warn|debug|info|trace|dir|table|group|time)\s*\()/.test(line) ||
+                      /^\+.*\bdebugger\s*;?\s*$/.test(line.trim()),
+      detail: (line) => {
+        const m = line.match(/\b(console\.\w+|debugger)/);
+        return `${m ? m[1] : 'Debug statement'} — remove before merging`;
+      }
+    },
+    {
+      id: 'lang_debug',
+      severity: 'warning',
+      label: 'Language debug tool',
+      test: (line) => /^\+.*\b(binding\.pry|binding\.irb|byebug|pry\.start|require\s+['"]pry['"]|var_dump\s*\(|dd\s*\(|dump\s*\(|ray\s*\(|xdebug_break\s*\(|raise\s+["']debug|print_r\s*\()\b/.test(line),
+      detail: () => 'Language-specific debug tool — remove before merging'
+    },
+    {
+      id: 'todo',
+      severity: 'warning',
+      label: 'TODO comment',
+      test: (line) => /^\+.*\b(TODO|FIXME|HACK|XXX|TEMP|NOCOMMIT)\b/.test(line),
+      detail: (line) => {
+        const m = line.match(/\b(TODO|FIXME|HACK|XXX|TEMP|NOCOMMIT)\b/);
+        return `${m ? m[1] : 'TODO'} comment in added lines — intended to commit this?`;
+      }
+    },
+    {
+      id: 'focused_test',
+      severity: 'info',
+      label: 'Focused or skipped test',
+      test: (line) => /^\+.*\b(fdescribe|fcontext|fit\s*\(|ftest\s*\(|xit\s*\(|xdescribe\s*\(|xcontext\s*\(|xtest\s*\(|test\.only\s*\(|describe\.only\s*\(|it\.only\s*\(|it\.skip\s*\(|test\.skip\s*\()\b/.test(line),
+      detail: () => 'Focused or skipped test — other tests may not run in CI'
+    }
+  ];
+
+  // --- Diff parser ---
+  function parseDiff(text) {
+    const lines = text.split('\n');
+    const findings = [];
+    let currentFile = null;
+    let newLineNum = 0;
+    let additionCount = 0;
+    const files = new Set();
+
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i];
+
+      // File header
+      if (raw.startsWith('+++ ')) {
+        const m = raw.match(/^\+\+\+ [ab]\/(.*)/);
+        currentFile = m ? m[1] : raw.slice(4);
+        if (currentFile !== '/dev/null') files.add(currentFile);
+        continue;
+      }
+
+      // Hunk header
+      if (raw.startsWith('@@ ')) {
+        const m = raw.match(/@@ -\d+(?:,\d+)? \+(\d+)/);
+        if (m) newLineNum = parseInt(m[1], 10) - 1;
+        continue;
+      }
+
+      // Skip meta lines
+      if (raw.startsWith('diff ') || raw.startsWith('--- ') ||
+          raw.startsWith('index ') || raw.startsWith('old mode') ||
+          raw.startsWith('new mode') || raw.startsWith('new file') ||
+          raw.startsWith('deleted file') || raw.startsWith('Binary')) {
+        continue;
+      }
+
+      // Context line
+      if (!raw.startsWith('+') && !raw.startsWith('-')) {
+        if (raw !== '\\ No newline at end of file') newLineNum++;
+        continue;
+      }
+
+      // Deleted line
+      if (raw.startsWith('-') && !raw.startsWith('---')) {
+        continue;
+      }
+
+      // Added line
+      if (raw.startsWith('+') && !raw.startsWith('+++')) {
+        newLineNum++;
+        additionCount++;
+
+        for (const rule of RULES) {
+          if (rule.test(raw)) {
+            findings.push({
+              severity: rule.severity,
+              label: rule.label,
+              detail: rule.detail(raw),
+              file: currentFile || '(unknown)',
+              lineNum: newLineNum,
+              snippet: raw
+            });
+          }
+        }
+      }
+    }
+
+    return { findings, files: Array.from(files), additionCount };
+  }
+
+  // --- Render ---
+  function severityOrder(s) {
+    return s === 'error' ? 0 : s === 'warning' ? 1 : 2;
+  }
+
+  function escapeHtml(str) {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function renderResults(parsed) {
+    const list = document.getElementById('results-list');
+    const statsBar = document.getElementById('stats-bar');
+    const summaryBar = document.getElementById('summary-counts');
+    const statFiles = document.getElementById('stat-files');
+    const statAdditions = document.getElementById('stat-additions');
+    const statFindings = document.getElementById('stat-findings');
+
+    const { findings, files, additionCount } = parsed;
+
+    // Stats
+    statsBar.style.display = 'flex';
+    statFiles.textContent = `${files.length} file${files.length !== 1 ? 's' : ''}`;
+    statAdditions.textContent = `${additionCount} addition${additionCount !== 1 ? 's' : ''}`;
+    statFindings.textContent = `${findings.length} finding${findings.length !== 1 ? 's' : ''}`;
+
+    // Summary counts
+    const errors = findings.filter(f => f.severity === 'error').length;
+    const warnings = findings.filter(f => f.severity === 'warning').length;
+    const infos = findings.filter(f => f.severity === 'info').length;
+
+    summaryBar.innerHTML = '';
+    if (errors > 0) summaryBar.innerHTML += `<span class="summary-count"><span class="count-dot dot-error"></span>${errors} error${errors !== 1 ? 's' : ''}</span>`;
+    if (warnings > 0) summaryBar.innerHTML += `<span class="summary-count"><span class="count-dot dot-warning"></span>${warnings} warning${warnings !== 1 ? 's' : ''}</span>`;
+    if (infos > 0) summaryBar.innerHTML += `<span class="summary-count"><span class="count-dot dot-info"></span>${infos} info</span>`;
+    if (findings.length === 0) summaryBar.innerHTML = `<span class="summary-count" style="color:var(--success)">✓ clean</span>`;
+
+    if (findings.length === 0) {
+      list.innerHTML = `
+        <div class="results-clean">
+          <span class="icon">✓</span>
+          <div class="clean-title">No issues found</div>
+          <div class="clean-sub">
+            Checked ${additionCount} addition${additionCount !== 1 ? 's' : ''} across ${files.length} file${files.length !== 1 ? 's' : ''}.
+            <br>No debug code, secrets, or conflict markers detected.
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    // Sort: errors first, then warnings, then info
+    const sorted = [...findings].sort((a, b) => severityOrder(a.severity) - severityOrder(b.severity));
+
+    list.innerHTML = sorted.map(f => `
+      <div class="finding">
+        <div class="finding-header">
+          <span class="severity-badge severity-${f.severity}">${f.severity}</span>
+          <span class="finding-label">${escapeHtml(f.label)}</span>
+          <span class="finding-location">${escapeHtml(f.file)}:${f.lineNum}</span>
+        </div>
+        <div class="finding-detail">${escapeHtml(f.detail)}</div>
+        <div class="finding-snippet ${f.severity}">${escapeHtml(f.snippet.length > 120 ? f.snippet.slice(0, 120) + '…' : f.snippet)}</div>
+      </div>
+    `).join('');
+  }
+
+  // --- Sample diff ---
+  const SAMPLE_DIFF = `diff --git a/src/api/users.js b/src/api/users.js
+index 4a2f1b3..8c9d0e2 100644
+--- a/src/api/users.js
++++ b/src/api/users.js
+@@ -8,12 +8,15 @@ const express = require('express');
+
+ router.get('/users/:id', async (req, res) => {
++  console.log('fetching user', req.params.id);
+   const user = await db.users.find(req.params.id);
++  // TODO: add pagination support
+   res.json(user);
+ });
+
+ router.post('/users', async (req, res) => {
++  const API_KEY = 'sk-live-abc123secretkeydonotcommit';
+   const user = await db.users.create(req.body);
+   res.status(201).json(user);
+ });
+diff --git a/test/users.test.js b/test/users.test.js
+index 1b3c4d5..2e6f7a8 100644
+--- a/test/users.test.js
++++ b/test/users.test.js
+@@ -4,6 +4,7 @@ describe('User API', () => {
++  fdescribe('GET /users/:id', () => {
+     it('returns user by id', async () => {
++      debugger;
+       const res = await request(app).get('/users/1');
+       expect(res.status).toBe(200);
+     });
+diff --git a/config/database.rb b/config/database.rb
+index 3a1b2c3..4d5e6f7 100644
+--- a/config/database.rb
++++ b/config/database.rb
+@@ -2,4 +2,5 @@ ActiveRecord::Base.establish_connection(
+   adapter: 'postgresql',
++  password: 'hunter2secret',
+   host: ENV['DB_HOST'],
+ )`;
+
+  // --- Event handlers ---
+  const input = document.getElementById('diff-input');
+  const lintBtn = document.getElementById('lint-btn');
+  const clearBtn = document.getElementById('clear-btn');
+  const sampleBtn = document.getElementById('load-sample-btn');
+
+  function runLint() {
+    const text = input.value.trim();
+    if (!text) return;
+    const parsed = parseDiff(text);
+    renderResults(parsed);
+  }
+
+  lintBtn.addEventListener('click', runLint);
+
+  clearBtn.addEventListener('click', () => {
+    input.value = '';
+    document.getElementById('results-list').innerHTML = `
+      <div class="results-empty">
+        <span class="emoji">🔍</span>
+        Paste a <code>git diff</code> and click <strong>Lint It</strong><br>
+        to scan for issues before you push.
+      </div>
+    `;
+    document.getElementById('stats-bar').style.display = 'none';
+    document.getElementById('summary-counts').innerHTML = '';
+  });
+
+  sampleBtn.addEventListener('click', () => {
+    input.value = SAMPLE_DIFF;
+    runLint();
+  });
+
+  // Ctrl+Enter to lint
+  input.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      runLint();
+    }
+  });
+
+  // Auto-lint on paste after short delay
+  input.addEventListener('paste', () => {
+    setTimeout(runLint, 50);
+  });
+})();
+</script>
+</body>
+</html>
