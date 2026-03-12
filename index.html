@@ -77,6 +77,22 @@
           "@type": "Answer",
           "text": "Run 'git diff' (for unstaged changes) or 'git diff --staged' (for staged changes) in your terminal and copy the output. You can also use 'git show HEAD' to check your last commit."
         }
+      },
+      {
+        "@type": "Question",
+        "name": "Why does DiffLint only scan added lines?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "DiffLint focuses on lines you're adding to the codebase (lines starting with + in the diff). Checking deleted lines for issues would create noise — you want to know what's going in, not what's leaving. Lines without a + prefix are context lines and are ignored."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "DiffLint flagged something that's intentional. What do I do?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Warnings and info findings are advisory — you decide what belongs in the commit. If you're intentionally leaving a TODO comment or a test-skip marker, that's your call. DiffLint surfaces it so the decision is conscious, not accidental."
+        }
       }
     ]
   }
