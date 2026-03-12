@@ -102,4 +102,4 @@ Planned paid tier: CI webhook integration — automatically scans pull requests 
 
 ## Support
 
-https://bitterdesk.com
+https://bitterdesk.com/s/difflint/
