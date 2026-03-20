@@ -1,0 +1,36 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Verify deploy token
+        run: |
+          test -n "${RADICCHIO_API_TOKEN:-}" || {
+            echo "Missing GitHub secret: RADICCHIO_API_TOKEN" >&2
+            exit 1
+          }
+        env:
+          RADICCHIO_API_TOKEN: ${{ secrets.RADICCHIO_API_TOKEN }}
+
+      - name: Deploy
+        run: |
+          chmod +x Scripts/deploy
+          Scripts/deploy
+        env:
+          RADICCHIO_API_TOKEN: ${{ secrets.RADICCHIO_API_TOKEN }}
