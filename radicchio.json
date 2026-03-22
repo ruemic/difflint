@@ -1,5 +1,5 @@
 {
-  "api_base": "https://radicchio.fly.dev",
+  "api_base": "https://radicchio.bitter.sh",
   "files": [
     "index.html",
     "og.png",
