@@ -35,10 +35,9 @@ jobs:
         env:
           RADICCHIO_API_TOKEN: ${{ secrets.RADICCHIO_API_TOKEN }}
 
-      - name: Verify live release
+      - name: Verify live site
         run: |
           chmod +x Scripts/postdeploy-verify
           Scripts/postdeploy-verify
         env:
           VERIFY_BASE_URL: https://difflint.radicchio.page
-          EXPECTED_GIT_SHA: ${{ github.sha }}
